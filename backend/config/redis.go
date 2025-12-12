@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -11,13 +12,27 @@ import (
 var RedisClient *redis.Client
 
 func InitRedis() error {
-	addr := os.Getenv("REDIS_ADDR")
-	if addr == "" {
-		return errors.New("REDIS_ADDR environment variable is not set")
+	val := os.Getenv("REDIS_ADDR")
+	if val == "" {
+		val = os.Getenv("REDIS_URI")
 	}
-	RedisClient = redis.NewClient(&redis.Options{
-		Addr: addr,
-	})
+	if val == "" {
+		val = os.Getenv("REDIS_URL")
+	}
+	if val == "" {
+		return errors.New("REDIS_ADDR (or REDIS_URI/REDIS_URL) environment variable is not set")
+	}
+
+	if strings.HasPrefix(val, "redis://") || strings.HasPrefix(val, "rediss://") {
+		opt, err := redis.ParseURL(val)
+		if err != nil {
+			return err
+		}
+		RedisClient = redis.NewClient(opt)
+	} else {
+		RedisClient = redis.NewClient(&redis.Options{Addr: val})
+	}
+
 	_, err := RedisClient.Ping(context.Background()).Result()
 	return err
 }
