@@ -16,6 +16,7 @@ type Deps struct {
 
 func RegisterRoutes(r *gin.Engine, d Deps) {
 	r.GET("/ping", func(c *gin.Context) { c.JSON(200, gin.H{"message": "pong"}) })
+	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "healthy"}) })
 
 	auth := r.Group("/")
 	auth.Use(middleware.JWTAuth())

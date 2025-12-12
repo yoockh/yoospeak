@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/yoockh/yoospeak/config"
 	"github.com/yoockh/yoospeak/internal/api/handlers"
@@ -35,41 +36,48 @@ func main() {
 
 	// Init MongoDB
 	if err := config.InitMongo(); err != nil {
-		log.Fatalf("MongoDB init error: %v", err)
+		l.WithError(err).Error("MongoDB init failed")
+		// Don't fatal - let app start for health checks
 	}
 	// Init PostgreSQL
 	if err := config.InitPostgres(); err != nil {
-		log.Fatalf("PostgreSQL init error: %v", err)
+		l.WithError(err).Error("PostgreSQL init failed")
 	}
 	// Init Redis
 	if err := config.InitRedis(); err != nil {
-		log.Fatalf("Redis init error: %v", err)
+		l.WithError(err).Error("Redis init failed")
 	}
 
-	// Ensure Mongo indexes (TTL)
-	if err := config.EnsureMongoIndexes(); err != nil {
-		log.Fatalf("Mongo indexes error: %v", err)
+	// Ensure Mongo indexes (TTL) - only if MongoDB is available
+	var mdb *mongo.Database
+	if config.MongoClient != nil {
+		if err := config.EnsureMongoIndexes(); err != nil {
+			l.WithError(err).Error("Mongo indexes error")
+		}
+		dbName := os.Getenv("MONGO_DB")
+		if dbName == "" {
+			dbName = "yoospeak"
+		}
+		l.WithField("mongo_db", dbName).Info("Using MongoDB database")
+		mdb = config.MongoClient.Database(dbName)
+	} else {
+		l.Warn("MongoDB not available - some features will be disabled")
 	}
 
-	// Mongo DB
-	dbName := os.Getenv("MONGO_DB")
-	if dbName == "" {
-		dbName = "yoospeak"
-	}
-	l.WithField("mongo_db", dbName).Info("Using MongoDB database")
-	mdb := config.MongoClient.Database(dbName)
-
-	// GCS uploader (required for CV upload)
+	// GCS uploader (optional for CV upload)
+	var gcsUp *storagepkg.GCSUploader
 	bucket := os.Getenv("GCS_BUCKET")
-	if bucket == "" {
-		log.Fatalf("GCS_BUCKET is required (for CV upload)")
+	if bucket != "" {
+		baseCtx := context.Background()
+		var err error
+		gcsUp, err = storagepkg.NewGCSUploader(baseCtx, bucket)
+		if err != nil {
+			l.WithError(err).Error("GCS uploader init failed")
+		}
+		if gcsUp != nil {
+			defer gcsUp.Close()
+		}
 	}
-	baseCtx := context.Background()
-	gcsUp, err := storagepkg.NewGCSUploader(baseCtx, bucket)
-	if err != nil {
-		log.Fatalf("GCS uploader init error: %v", err)
-	}
-	defer gcsUp.Close()
 
 	// Repos
 	sessionRepo := mongorepo.NewSessionRepo(mdb)
@@ -131,33 +139,31 @@ func main() {
 
 		sttP, err = sttprov.NewGoogleSpeech(ctx)
 		if err != nil {
-			log.Fatalf("STT init error: %v", err)
-		}
-
-		projectID := os.Getenv("VERTEX_PROJECT_ID")
-		location := os.Getenv("VERTEX_LOCATION")
-		model := os.Getenv("VERTEX_GEMINI_MODEL")
-		if projectID == "" || location == "" {
-			log.Fatalf("VERTEX_PROJECT_ID and VERTEX_LOCATION are required when RUN_WORKERS=1")
-		}
-
-		llmP, err = llmprov.NewVertexGemini(ctx, projectID, location, model)
-		if err != nil {
-			log.Fatalf("LLM init error: %v", err)
-		}
-
-		pool := &workers.AudioWorkerPool{
-			Redis:      config.RedisClient,
-			Buffers:    bufferSvc,
-			NumWorkers: 5,
-			STT:        sttP,
-			LLM:        llmP,
-			Logger:     l,
-			Stream:     "audio:stream",
-			Group:      "audio-workers",
-		}
-		if err := pool.Start(ctx); err != nil {
-			log.Fatalf("Workers start error: %v", err)
+			l.WithError(err).Error("STT init failed")
+		} else {
+			projectID := os.Getenv("VERTEX_PROJECT_ID")
+			location := os.Getenv("VERTEX_LOCATION")
+			model := os.Getenv("VERTEX_GEMINI_MODEL")
+			if projectID != "" && location != "" {
+				llmP, err = llmprov.NewVertexGemini(ctx, projectID, location, model)
+				if err != nil {
+					l.WithError(err).Error("LLM init failed")
+				} else if config.RedisClient != nil {
+					pool := &workers.AudioWorkerPool{
+						Redis:      config.RedisClient,
+						Buffers:    bufferSvc,
+						NumWorkers: 5,
+						STT:        sttP,
+						LLM:        llmP,
+						Logger:     l,
+						Stream:     "audio:stream",
+						Group:      "audio-workers",
+					}
+					if err := pool.Start(ctx); err != nil {
+						l.WithError(err).Error("Workers start failed")
+					}
+				}
+			}
 		}
 	}
 
