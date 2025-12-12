@@ -18,10 +18,14 @@ func InitMongo() error {
 		return errors.New("MONGO_URI environment variable is not set")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(ctx, options.Client().
+		ApplyURI(uri).
+		SetServerSelectionTimeout(20*time.Second).
+		SetConnectTimeout(15*time.Second),
+	)
 	if err != nil {
 		return err
 	}
