@@ -86,6 +86,8 @@ func (h *WSHandler) SessionWS(c *gin.Context) {
 		return
 	}
 
+	sessionLang := sess.Language
+
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		// upgrade already wrote response in most cases
@@ -161,6 +163,7 @@ func (h *WSHandler) SessionWS(c *gin.Context) {
 					"chunk_index": strconv.FormatInt(msg.ChunkIndex, 10),
 					"is_final":    strconv.FormatBool(msg.IsFinal),
 					"ts_unix":     strconv.FormatInt(time.Now().UTC().Unix(), 10),
+					"language":    sessionLang, // <-- ADD
 				}
 				if audioBase64Ptr != nil {
 					fields["audio_base64"] = *audioBase64Ptr
