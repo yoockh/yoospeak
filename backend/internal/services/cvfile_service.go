@@ -38,7 +38,7 @@ func (s *cvFileService) Upload(ctx context.Context, userID string, fileName stri
 		return nil, utils.E(utils.CodeInternal, op, "uploader is not configured", nil)
 	}
 
-	publicURL, err := s.uploader.Upload(ctx, objectName, mimeType, r)
+	storedPath, err := s.uploader.Upload(ctx, objectName, mimeType, r)
 	if err != nil {
 		return nil, utils.E(utils.CodeUnavailable, op, "failed to upload file", err)
 	}
@@ -47,7 +47,7 @@ func (s *cvFileService) Upload(ctx context.Context, userID string, fileName stri
 		ID:       uuid.NewString(),
 		UserID:   userID,
 		FileName: fileName,
-		FilePath: publicURL,
+		FilePath: storedPath, // <-- was public URL; now object key
 		FileSize: fileSize,
 		MimeType: mimeType,
 		UploadAt: time.Now().UTC(),

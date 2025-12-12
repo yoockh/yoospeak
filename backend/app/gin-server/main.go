@@ -52,7 +52,7 @@ func main() {
 	}
 
 	// Mongo DB
-	dbName := os.Getenv("MONGO_URI")
+	dbName := os.Getenv("MONGO_DB")
 	if dbName == "" {
 		dbName = "yoospeak"
 	}
@@ -63,8 +63,8 @@ func main() {
 	if bucket == "" {
 		log.Fatalf("GCS_BUCKET is required (for CV upload)")
 	}
-	ctx := context.Background()
-	gcsUp, err := storagepkg.NewGCSUploader(ctx, bucket)
+	baseCtx := context.Background()
+	gcsUp, err := storagepkg.NewGCSUploader(baseCtx, bucket)
 	if err != nil {
 		log.Fatalf("GCS uploader init error: %v", err)
 	}
