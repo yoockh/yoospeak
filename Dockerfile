@@ -1,4 +1,4 @@
-FROM golang:1.22-bookworm AS build
+FROM golang:1.24-bookworm AS build
 WORKDIR /app
 
 COPY backend/go.mod backend/go.sum ./
