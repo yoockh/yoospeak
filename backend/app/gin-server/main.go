@@ -56,6 +56,7 @@ func main() {
 	if dbName == "" {
 		dbName = "yoospeak"
 	}
+	l.WithField("mongo_db", dbName).Info("Using MongoDB database")
 	mdb := config.MongoClient.Database(dbName)
 
 	// GCS uploader (required for CV upload)
