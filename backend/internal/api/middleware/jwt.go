@@ -15,6 +15,13 @@ type apiError struct {
 	Message string     `json:"message"`
 }
 
+type supabaseClaims struct {
+	jwt.RegisteredClaims
+	Role         string         `json:"role"`         // usually "authenticated" / "anon"
+	AppMetadata  map[string]any `json:"app_metadata"` // put {"role":"admin"} here
+	UserMetadata map[string]any `json:"user_metadata"`
+}
+
 func JWTAuth() gin.HandlerFunc {
 	secret := os.Getenv("SUPABASE_JWT_SECRET")
 	issuer := os.Getenv("SUPABASE_JWT_ISSUER")     // optional
@@ -47,7 +54,7 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
-		claims := &jwt.RegisteredClaims{}
+		claims := &supabaseClaims{}
 		tok, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (any, error) {
 			if t.Method != jwt.SigningMethodHS256 {
 				return nil, jwt.ErrTokenSignatureInvalid
@@ -70,6 +77,7 @@ func JWTAuth() gin.HandlerFunc {
 			})
 			return
 		}
+
 		if audience != "" {
 			valid := false
 			for _, aud := range claims.Audience {
@@ -96,7 +104,18 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
+		// Default role: "user" (app-level role)
+		appRole := "user"
+		if claims.AppMetadata != nil {
+			if v, ok := claims.AppMetadata["role"]; ok {
+				if s, ok := v.(string); ok && s != "" {
+					appRole = s
+				}
+			}
+		}
+
 		c.Set("user_id", userID)
+		c.Set("role", appRole)
 		c.Next()
 	}
 }

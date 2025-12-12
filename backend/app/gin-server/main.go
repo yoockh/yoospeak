@@ -52,7 +52,7 @@ func main() {
 	}
 
 	// Mongo DB
-	dbName := os.Getenv("MONGO_DB")
+	dbName := os.Getenv("MONGO_URI")
 	if dbName == "" {
 		dbName = "yoospeak"
 	}
