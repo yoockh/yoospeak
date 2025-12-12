@@ -5,7 +5,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server ./app/gin-server
+RUN CGO_ENABLED=0 GOOS=linux go build -o server ./backend/app/gin-server
 
 FROM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
