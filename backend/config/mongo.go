@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -25,35 +27,51 @@ func InitMongo() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// MongoDB client options - let driver handle TLS for Atlas automatically
-	clientOpts := options.Client().ApplyURI(uri).
+	baseOpts := options.Client().ApplyURI(uri).
 		SetServerSelectionTimeout(20 * time.Second).
 		SetConnectTimeout(15 * time.Second).
 		SetMaxPoolSize(10).
 		SetMinPoolSize(1)
 
-	// Configure TLS for Go 1.24+ compatibility with MongoDB Atlas
-	// Go 1.24 has stricter TLS requirements that may conflict with Atlas
-	if os.Getenv("MONGO_FORCE_TLS_CONFIG") == "true" || os.Getenv("GO_ENV") == "development" {
-		tlsConfig := &tls.Config{
-			InsecureSkipVerify: os.Getenv("MONGO_INSECURE_TLS") == "true",
-			MinVersion:         tls.VersionTLS12,
-			MaxVersion:         tls.VersionTLS12, // Force TLS 1.2 for Atlas compatibility
+	// Try default connect first (let driver choose TLS params)
+	if client, err := tryConnect(ctx, baseOpts); err == nil {
+		MongoClient = client
+		return nil
+	} else {
+		// If TLS-related and user explicitly asked for insecure debug, retry with InsecureSkipVerify
+		insecure := false
+		if v := os.Getenv("MONGO_INSECURE_TLS"); v != "" {
+			if b, err := strconv.ParseBool(v); err == nil && b {
+				insecure = b
+			}
 		}
-		clientOpts = clientOpts.SetTLSConfig(tlsConfig)
+		if insecure {
+			tlsConfig := &tls.Config{
+				InsecureSkipVerify: true,
+				MinVersion:         tls.VersionTLS12,
+			}
+			fmt.Println("InitMongo: retrying with InsecureSkipVerify=true (debug only)")
+			clientOpts := baseOpts.SetTLSConfig(tlsConfig)
+			if client, err := tryConnect(ctx, clientOpts); err == nil {
+				MongoClient = client
+				return nil
+			} else {
+				return fmt.Errorf("InitMongo: retry with insecure tls failed: %w", err)
+			}
+		}
+		return fmt.Errorf("InitMongo: initial connect failed: %w", err)
 	}
+}
 
+func tryConnect(ctx context.Context, clientOpts *options.ClientOptions) (*mongo.Client, error) {
 	client, err := mongo.Connect(ctx, clientOpts)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	// Ping the database to verify connection
+	// Ping to verify connection
 	if err := client.Ping(ctx, nil); err != nil {
 		_ = client.Disconnect(ctx)
-		return err
+		return nil, err
 	}
-
-	MongoClient = client
-	return nil
+	return client, nil
 }
