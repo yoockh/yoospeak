@@ -16,11 +16,6 @@ func NewConversationHandler(svc services.ConversationService) *ConversationHandl
 	return &ConversationHandler{svc: svc}
 }
 
-type ConversationListResponse struct {
-	SessionID     string      `json:"session_id"`
-	Conversations interface{} `json:"conversations"`
-}
-
 func (h *ConversationHandler) ListBySession(c *gin.Context) {
 	userID, ok := requireUserID(c)
 	if !ok {

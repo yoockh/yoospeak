@@ -44,13 +44,6 @@ type wsClientMsg struct {
 	// pause/resume/end_session -> no fields
 }
 
-type wsServerMsg struct {
-	Type string `json:"type"`
-
-	// generic payload pass-through (workers publish JSON to Redis; WS forwards)
-	// keep this minimal at handler layer
-}
-
 type wsConn struct {
 	c  *websocket.Conn
 	mu sync.Mutex

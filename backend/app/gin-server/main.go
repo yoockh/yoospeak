@@ -24,6 +24,7 @@ import (
 
 	llmprov "github.com/yoockh/yoospeak/internal/providers/llm"
 	sttprov "github.com/yoockh/yoospeak/internal/providers/stt"
+	storagepkg "github.com/yoockh/yoospeak/internal/storage"
 	"github.com/yoockh/yoospeak/internal/workers"
 )
 
@@ -57,12 +58,25 @@ func main() {
 	}
 	mdb := config.MongoClient.Database(dbName)
 
+	// GCS uploader (required for CV upload)
+	bucket := os.Getenv("GCS_BUCKET")
+	if bucket == "" {
+		log.Fatalf("GCS_BUCKET is required (for CV upload)")
+	}
+	ctx := context.Background()
+	gcsUp, err := storagepkg.NewGCSUploader(ctx, bucket)
+	if err != nil {
+		log.Fatalf("GCS uploader init error: %v", err)
+	}
+	defer gcsUp.Close()
+
 	// Repos
 	sessionRepo := mongorepo.NewSessionRepo(mdb)
 	bufferRepo := mongorepo.NewBufferRepo(mdb)
 
 	profileRepo := pgrepo.NewProfileRepo(config.PostgresDB)
 	convoRepo := pgrepo.NewConversationRepo(config.PostgresDB)
+	cvRepo := pgrepo.NewCVFileRepo(config.PostgresDB)
 
 	// Cache (optional)
 	redisCache := cache.NewRedisCache(config.RedisClient)
@@ -72,12 +86,14 @@ func main() {
 	bufferSvc := services.NewBufferService(bufferRepo, 24*time.Hour)
 	profileSvc := services.NewProfileServiceWithCache(profileRepo, redisCache, 5*time.Minute)
 	convoSvc := services.NewConversationService(convoRepo)
+	cvSvc := services.NewCVFileService(cvRepo, gcsUp)
 
 	// Handlers
 	sessionH := handlers.NewSessionHandler(sessionSvc)
 	profileH := handlers.NewProfileHandler(profileSvc)
 	convoH := handlers.NewConversationHandler(convoSvc)
 	wsH := handlers.NewWSHandler(sessionSvc, bufferSvc, config.RedisClient)
+	cvH := handlers.NewCVHandler(cvSvc)
 
 	// Gin
 	r := gin.New()
@@ -89,6 +105,7 @@ func main() {
 		Profile:      profileH,
 		Conversation: convoH,
 		WS:           wsH,
+		CV:           cvH,
 	})
 
 	port := os.Getenv("PORT")

@@ -11,6 +11,7 @@ type Deps struct {
 	Profile      *handlers.ProfileHandler
 	Conversation *handlers.ConversationHandler
 	WS           *handlers.WSHandler
+	CV           *handlers.CVHandler
 }
 
 func RegisterRoutes(r *gin.Engine, d Deps) {
@@ -31,6 +32,9 @@ func RegisterRoutes(r *gin.Engine, d Deps) {
 	auth.PUT("/profile/update", d.Profile.Update)
 
 	auth.GET("/conversation/:session_id", d.Conversation.ListBySession)
+
+	// CV
+	auth.POST("/cv/upload", d.CV.Upload)
 
 	// WebSocket
 	auth.GET("/ws/session/:session_id", d.WS.SessionWS)
