@@ -28,7 +28,7 @@ func NewWSHandler(sessions services.SessionService, buffers services.BufferServi
 		buffers:  buffers,
 		redis:    rdb,
 		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true }, // TODO: restrict origin in prod
+			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	}
 }
