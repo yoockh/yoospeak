@@ -1,11 +1,11 @@
 FROM golang:1.22-bookworm AS build
 WORKDIR /app
 
-COPY go.mod go.sum ./
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./backend/app/gin-server
+COPY backend/ .
+RUN CGO_ENABLED=0 GOOS=linux go build -o server ./app/gin-server
 
 FROM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
